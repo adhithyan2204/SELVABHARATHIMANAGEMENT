@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shop Management</title>
+<style>
+*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;background:#f3f6fa;color:#222}
+.container{max-width:650px;margin:auto;padding:16px}.card{background:#fff;padding:18px;margin-bottom:15px;border-radius:14px;box-shadow:0 2px 10px #0001}
+h1,h2{margin-top:0}.menu{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{width:100%;padding:13px;border:0;border-radius:9px;background:#1769e0;color:white;font-size:15px;margin-top:8px}
+.secondary{background:#666}.danger{background:#d93025}input,select{width:100%;padding:11px;margin:6px 0 12px;border:1px solid #ccd3db;border-radius:8px;font-size:15px}
+.hidden{display:none}.row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #eee}
+.profit{font-size:23px;font-weight:bold}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:7px;border-bottom:1px solid #ddd;text-align:left}
+.small{color:#667;font-size:13px}@media(max-width:500px){.menu{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="card"><h1>🏪 Shop Management</h1><div class="small">Daily transactions and monthly profit</div></div>
+
+<div id="home" class="card">
+<h2>Menu</h2><div class="menu">
+<button onclick="show('opening')">💰 Opening Balance</button>
+<button onclick="show('transaction')">➕ Add Transaction</button>
+<button onclick="show('daily')">📊 Daily Report</button>
+<button onclick="show('monthly')">📅 Monthly Profit</button>
+<button onclick="show('history')">📜 Transaction History</button>
+</div></div>
+
+<div id="opening" class="card hidden"><h2>Opening Balance</h2>
+<label>Date</label><input type="date" id="openDate">
+<label>Opening Amount ₹</label><input type="number" id="openAmount" min="0" step=".01">
+<button onclick="saveOpening()">Save / Change</button><button class="secondary" onclick="home()">Back</button></div>
+
+<div id="transaction" class="card hidden"><h2>Add Transaction</h2>
+<label>Customer Name</label><input id="customer">
+<label>Service</label><select id="service">
+<option>Withdrawal</option><option>Money Transfer</option><option>Recharge</option></select>
+<label>Amount ₹</label><input type="number" id="amount" min="1" step=".01">
+<button onclick="addTransaction()">Save Transaction</button><button class="secondary" onclick="home()">Back</button></div>
+
+<div id="daily" class="card hidden"><h2>Daily Report</h2>
+<label>Date</label><input type="date" id="reportDate"><button onclick="dailyReport()">Generate Report</button>
+<div id="dailyResult"></div><button class="secondary" onclick="home()">Back</button></div>
+
+<div id="monthly" class="card hidden"><h2>Monthly Profit</h2>
+<label>Month</label><input type="month" id="reportMonth"><button onclick="monthlyProfit()">Generate Monthly Profit</button>
+<div id="monthlyResult"></div><button class="secondary" onclick="home()">Back</button></div>
+
+<div id="history" class="card hidden"><h2>Transaction History</h2><div id="historyResult"></div>
+<button class="danger" onclick="clearAll()">Clear All Data</button><button class="secondary" onclick="home()">Back</button></div>
+</div>
+
+<script>
+const TK="shop_transactions",OK="shop_openings";
+let transactions=JSON.parse(localStorage.getItem(TK)||"[]");
+let openings=JSON.parse(localStorage.getItem(OK)||"{}");
+const today=()=>new Date().toISOString().slice(0,10);
+const money=n=>"₹"+Number(n||0).toFixed(2);
+function show(id){document.querySelectorAll(".card").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden")}
+function home(){location.reload()}
+openDate.value=today();reportDate.value=today();reportMonth.value=today().slice(0,7);
+
+function saveOpening(){
+ let d=openDate.value,a=Number(openAmount.value);
+ if(!d||a<0)return alert("Enter valid details.");
+ openings[d]=a;localStorage.setItem(OK,JSON.stringify(openings));alert("Opening balance saved.");
+}
+function addTransaction(){
+ let c=customer.value.trim(),s=service.value,a=Number(amount.value);
+ if(!c||a<=0)return alert("Enter valid customer and amount.");
+ let commission=s==="Withdrawal"?a*.01:s==="Money Transfer"?a*.015:0;
+ transactions.push({customer:c,service:s,amount:a,commission,date:today(),time:new Date().toLocaleTimeString()});
+ localStorage.setItem(TK,JSON.stringify(transactions));alert("Transaction saved.");
+ customer.value="";amount.value="";
+}
+function dailyReport(){
+ let d=reportDate.value,list=transactions.filter(x=>x.date===d),o=Number(openings[d]||0),w=0,t=0,r=0,p=0;
+ list.forEach(x=>{if(x.service==="Withdrawal")w+=x.amount;if(x.service==="Money Transfer")t+=x.amount;if(x.service==="Recharge")r+=x.amount;p+=x.commission});
+ let close=o-w+t+r;
+ dailyResult.innerHTML=`<div class="row"><span>Opening</span><b>${money(o)}</b></div>
+<div class="row"><span>Withdrawal</span><b>${money(w)}</b></div><div class="row"><span>Money Transfer</span><b>${money(t)}</b></div>
+<div class="row"><span>Recharge</span><b>${money(r)}</b></div><div class="row"><span>Profit</span><b>${money(p)}</b></div>
+<div class="row"><span>Closing Balance</span><b>${money(close)}</b></div><p class="small">${list.length} transaction(s)</p>`;
+}
+function monthlyProfit(){
+ let m=reportMonth.value,list=transactions.filter(x=>x.date.startsWith(m)),p=0;
+ list.forEach(x=>p+=x.commission);
+ monthlyResult.innerHTML=`<div class="row"><span>Total Transactions</span><b>${list.length}</b></div>
+<div class="row"><span>Total Commission</span><b>${money(p)}</b></div><p>Monthly Profit</p><div class="profit">${money(p)}</div>`;
+}
+function history(){
+ let l=[...transactions].reverse();
+ if(!l.length){historyResult.innerHTML="<p>No transactions found.</p>";return;}
+ historyResult.innerHTML=`<div class="small">Showing ${l.length} transaction(s), newest first.</div>
+ <table><tr><th>Date</th><th>Time</th><th>Customer</th><th>Service</th><th>Amount</th><th>Profit</th></tr>
+ ${l.map(x=>`<tr><td>${x.date}</td><td>${x.time||"-"}</td><td>${x.customer}</td><td>${x.service}</td><td>${money(x.amount)}</td><td>${money(x.commission)}</td></tr>`).join("")}</table>`;
+}
+function clearAll(){if(confirm("Delete all data?")){localStorage.removeItem(TK);localStorage.removeItem(OK);location.reload()}}
+</script>
+</body>
+</html>
