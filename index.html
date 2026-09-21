@@ -13,7 +13,7 @@ button{width:100%;padding:13px;border:0;border-radius:9px;background:#1769e0;col
 .hidden{display:none}.row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #eee}
 .profit{font-size:23px;font-weight:bold}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:7px;border-bottom:1px solid #ddd;text-align:left}
 .small{color:#667;font-size:13px}@media(max-width:500px){.menu{grid-template-columns:1fr}}
-</style>
+table{min-width:650px}.card{overflow:hidden}</style>
 </head>
 <body>
 <div class="container">
@@ -35,10 +35,11 @@ button{width:100%;padding:13px;border:0;border-radius:9px;background:#1769e0;col
 
 <div id="transaction" class="card hidden"><h2>Add Transaction</h2>
 <label>Customer Name</label><input id="customer">
-<label>Service</label><select id="service">
+<label>Service</label><select id="service" onchange="toggleAadhaar()">
 <option>Withdrawal</option><option>Money Transfer</option><option>Recharge</option></select>
+
 <label>Amount ₹</label><input type="number" id="amount" min="1" step=".01">
-<button onclick="addTransaction()">Save Transaction</button><button class="secondary" onclick="home()">Back</button></div>
+<button onclick="addTransaction()">Save Transaction</button><h3>Today's Transactions</h3><div style="overflow-x:auto"><div id="todayTransactions"></div></div><button class="secondary" onclick="home()">Back</button></div>
 
 <div id="daily" class="card hidden"><h2>Daily Report</h2>
 <label>Date</label><input type="date" id="reportDate"><button onclick="dailyReport()">Generate Report</button>
@@ -60,44 +61,81 @@ const today=()=>new Date().toISOString().slice(0,10);
 const money=n=>"₹"+Number(n||0).toFixed(2);
 function show(id){document.querySelectorAll(".card").forEach(x=>x.classList.add("hidden"));document.getElementById(id).classList.remove("hidden")}
 function home(){location.reload()}
-openDate.value=today();reportDate.value=today();reportMonth.value=today().slice(0,7);
-
-function saveOpening(){
+openDate.value=today();reportDate.value=today();reportMonth.value=today().slice(0,7);renderTodayTransactions();function saveOpening(){
  let d=openDate.value,a=Number(openAmount.value);
  if(!d||a<0)return alert("Enter valid details.");
  openings[d]=a;localStorage.setItem(OK,JSON.stringify(openings));alert("Opening balance saved.");
 }
+
 function addTransaction(){
  let c=customer.value.trim(),s=service.value,a=Number(amount.value);
  if(!c||a<=0)return alert("Enter valid customer and amount.");
  let commission=s==="Withdrawal"?a*.01:s==="Money Transfer"?a*.015:0;
- transactions.push({customer:c,service:s,amount:a,commission,date:today(),time:new Date().toLocaleTimeString()});
- localStorage.setItem(TK,JSON.stringify(transactions));alert("Transaction saved.");
+ transactions.push({id:Date.now(),customer:c,service:s,amount:a,commission,date:today(),time:new Date().toLocaleTimeString()});
+ localStorage.setItem(TK,JSON.stringify(transactions));
+ alert("Transaction saved.");
  customer.value="";amount.value="";
+ renderTodayTransactions();
+}
+function renderTodayTransactions(){
+ let list=transactions.filter(x=>x.date===today()).reverse();
+ todayTransactions.innerHTML=list.length?`<table>
+ <tr><th>Customer Name</th><th>Service</th><th>Amount</th><th>Commission</th><th>Time</th><th>Edit</th></tr>
+ ${list.map(x=>`<tr><td>${x.customer}</td><td>${x.service}</td><td>${money(x.amount)}</td><td>${money(x.commission)}</td><td>${x.time||"-"}</td>
+ <td><button onclick="editTransaction(${x.id})">Edit</button></td></tr>`).join("")}</table>`:"<p class='small'>No transactions today.</p>";
+}
+function editTransaction(id){
+ let x=transactions.find(t=>t.id===id); if(!x)return alert("Transaction not found.");
+ let c=prompt("Customer Name:",x.customer); if(c===null)return;
+ let s=prompt("Service (Withdrawal / Money Transfer / Recharge):",x.service); if(s===null)return;
+ s=s.trim(); if(!["Withdrawal","Money Transfer","Recharge"].includes(s))return alert("Invalid service.");
+ let a=Number(prompt("Amount ₹:",x.amount)); if(!a||a<=0)return alert("Invalid amount.");
+ let tm=prompt("Time:",x.time||""); if(tm===null)return;
+ x.customer=c.trim(); x.service=s; x.amount=a; x.time=tm.trim()||x.time;
+ x.commission=s==="Withdrawal"?a*.01:s==="Money Transfer"?a*.015:0;
+ localStorage.setItem(TK,JSON.stringify(transactions));
+ renderTodayTransactions(); alert("Transaction updated.");
 }
 function dailyReport(){
  let d=reportDate.value,list=transactions.filter(x=>x.date===d),o=Number(openings[d]||0),w=0,t=0,r=0,p=0;
  list.forEach(x=>{if(x.service==="Withdrawal")w+=x.amount;if(x.service==="Money Transfer")t+=x.amount;if(x.service==="Recharge")r+=x.amount;p+=x.commission});
  let close=o-w+t+r;
- dailyResult.innerHTML=`<div class="row"><span>Opening</span><b>${money(o)}</b></div>
-<div class="row"><span>Withdrawal</span><b>${money(w)}</b></div><div class="row"><span>Money Transfer</span><b>${money(t)}</b></div>
-<div class="row"><span>Recharge</span><b>${money(r)}</b></div><div class="row"><span>Profit</span><b>${money(p)}</b></div>
-<div class="row"><span>Closing Balance</span><b>${money(close)}</b></div><p class="small">${list.length} transaction(s)</p>`;
+ dailyResult.innerHTML=`<div class="row"><span>Opening Balance</span><b>${money(o)}</b></div>
+ <div class="row"><span>Total Withdrawal</span><b>${money(w)}</b></div>
+ <div class="row"><span>Total Money Transfer</span><b>${money(t)}</b></div>
+ <div class="row"><span>Total Recharge</span><b>${money(r)}</b></div>
+ <div class="row"><span>Total Commission</span><b>${money(p)}</b></div>
+ <div class="row"><span>Profit</span><b>${money(p)}</b></div>
+ <div class="row"><span>Closing Balance</span><b>${money(close)}</b></div>
+ <h3>All Transactions</h3>
+ ${list.length?`<div style="overflow-x:auto"><table><tr><th>Customer Name</th><th>Service</th><th>Amount</th><th>Commission</th><th>Time</th></tr>
+ ${list.map(x=>`<tr><td>${x.customer}</td><td>${x.service}</td><td>${money(x.amount)}</td><td>${money(x.commission)}</td><td>${x.time||"-"}</td></tr>`).join("")}</table></div>`:"<p>No transactions for this date.</p>"}`;
 }
 function monthlyProfit(){
- let m=reportMonth.value,list=transactions.filter(x=>x.date.startsWith(m)),p=0;
- list.forEach(x=>p+=x.commission);
+ let m=reportMonth.value,list=transactions.filter(x=>x.date.startsWith(m)),p=0; list.forEach(x=>p+=x.commission);
  monthlyResult.innerHTML=`<div class="row"><span>Total Transactions</span><b>${list.length}</b></div>
-<div class="row"><span>Total Commission</span><b>${money(p)}</b></div><p>Monthly Profit</p><div class="profit">${money(p)}</div>`;
+ <div class="row"><span>Total Commission</span><b>${money(p)}</b></div><p>Monthly Profit</p><div class="profit">${money(p)}</div>
+ <h3>All Monthly Transactions</h3>
+ ${list.length?`<div style="overflow-x:auto"><table><tr><th>Customer Name</th><th>Service</th><th>Amount</th><th>Commission</th><th>Time</th><th>Date</th></tr>
+ ${list.map(x=>`<tr><td>${x.customer}</td><td>${x.service}</td><td>${money(x.amount)}</td><td>${money(x.commission)}</td><td>${x.time||"-"}</td><td>${x.date}</td></tr>`).join("")}</table></div>`:"<p>No transactions for this month.</p>"}
+ <button onclick="printMonthlyReport()">🖨️ Print Monthly Transaction Report</button>`;
+}
+function printMonthlyReport(){
+ let m=reportMonth.value,list=transactions.filter(x=>x.date.startsWith(m)),p=0; list.forEach(x=>p+=x.commission);
+ let rows=list.map(x=>`<tr><td>${x.customer}</td><td>${x.service}</td><td>${money(x.amount)}</td><td>${money(x.commission)}</td><td>${x.time||"-"}</td><td>${x.date}</td></tr>`).join("");
+ let w=window.open("","_blank");
+ w.document.write(`<html><head><title>Monthly Transaction Report - ${m}</title><style>body{font-family:Arial;padding:25px}h1{text-align:center}table{width:100%;border-collapse:collapse}th,td{border:1px solid #555;padding:8px}th{background:#eee}table{min-width:650px}.card{overflow:hidden}</style></head><body>
+ <h1>Shop Management - Monthly Transaction Report</h1><p><b>Month:</b> ${m}</p><p><b>Total Transactions:</b> ${list.length} &nbsp; <b>Profit:</b> ${money(p)}</p>
+ <table><tr><th>Customer Name</th><th>Service</th><th>Amount</th><th>Commission</th><th>Time</th><th>Date</th></tr>${rows}</table>
+ <script>window.print();</script></body></html>`); w.document.close();
 }
 function history(){
  let l=[...transactions].reverse();
- if(!l.length){historyResult.innerHTML="<p>No transactions found.</p>";return;}
- historyResult.innerHTML=`<div class="small">Showing ${l.length} transaction(s), newest first.</div>
- <table><tr><th>Date</th><th>Time</th><th>Customer</th><th>Service</th><th>Amount</th><th>Profit</th></tr>
- ${l.map(x=>`<tr><td>${x.date}</td><td>${x.time||"-"}</td><td>${x.customer}</td><td>${x.service}</td><td>${money(x.amount)}</td><td>${money(x.commission)}</td></tr>`).join("")}</table>`;
+ historyResult.innerHTML=l.length?`<div style="overflow-x:auto"><table><tr><th>Customer Name</th><th>Service</th><th>Amount</th><th>Commission</th><th>Date</th><th>Time</th></tr>
+ ${l.map(x=>`<tr><td>${x.customer}</td><td>${x.service}</td><td>${money(x.amount)}</td><td>${money(x.commission)}</td><td>${x.date}</td><td>${x.time||"-"}</td></tr>`).join("")}</table></div>`:"<p>No transactions found.</p>";
 }
-function clearAll(){if(confirm("Delete all data?")){localStorage.removeItem(TK);localStorage.removeItem(OK);location.reload()}}
+function clearAll(){alert("Data is protected. It will not be deleted automatically.");}
+
 </script>
 </body>
 </html>
